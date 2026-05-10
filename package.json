@@ -1,0 +1,39 @@
+{
+  "name": "bh3text-content-search",
+  "version": "0.0.0",
+  "description": "",
+  "homepage": "https://github.com/mtxc26/bh3text-content-search#readme",
+  "bugs": {
+    "url": "https://github.com/mtxc26/bh3text-content-search/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mtxc26/bh3text-content-search.git"
+  },
+  "author": "",
+  "type": "module",
+  "scripts": {
+    "postinstall": "npm run install-all",
+    "install-all": "npm run install-data",
+    "install-data": "cd data && npm ci || npm i",
+    "build-submodule": "cd data && npm run build2",
+    "build-only": "rolldown -c",
+    "type-check": "tsc --noEmit",
+    "build": "rimraf dist && npm run build-submodule && npm run build-data && npm run build-only",
+    "build-data": "node scripts/build-data.mjs"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260510.1",
+    "@types/ejs": "^3.1.5",
+    "@types/node": "^25.6.2",
+    "rimraf": "^6.1.3",
+    "rolldown": "^1.0.0",
+    "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "ejs": "^5.0.2",
+    "fflate": "^0.8.2",
+    "itty-router": "^5.0.23",
+    "lz-string": "^1.5.0"
+  }
+}

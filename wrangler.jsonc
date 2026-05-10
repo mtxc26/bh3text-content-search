@@ -1,0 +1,12 @@
+{
+  "assets": {
+    "directory": "./dist/static"
+  },
+  "name": "bh3text-content-search",
+  "compatibility_date": "2026-05-06",
+  "workers_dev": false,
+  "main": "dist/main.js",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ]
+}
