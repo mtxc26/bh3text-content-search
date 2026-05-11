@@ -1,5 +1,4 @@
-import ejs from 'ejs';
-import searchTemplate from "../pages/search.ejs";
+import renderTemplate from "../build-cache/search.hbs.js";
 import { gunzipSync } from "fflate";
 
 // ── Types ──
@@ -37,15 +36,14 @@ let dataCache: StageData[] | null = null;
 const BASE_URL = 'https://www.bh3text.com';
 const CATEGORIES = ['main1', 'main2', 'er'] as const;
 
-async function loadAllData(requestUrl: string): Promise<StageData[]> {
+async function loadAllData(env: any): Promise<StageData[]> {
   if (dataCache) return dataCache;
 
   const allStages: StageData[] = [];
-  const baseUrl = new URL(requestUrl).origin;
 
   for (const cat of CATEGORIES) {
-    const url = `${baseUrl}/all/${cat}.json.gz`;
-    const resp = await fetch(url);
+    const req = new Request(`https://local/all/${cat}.json.gz`);
+    const resp = await env.ASSETS.fetch(req);
     if (!resp.ok) continue;
     const buf = new Uint8Array(await resp.arrayBuffer());
     const decompressed = gunzipSync(buf);
@@ -60,8 +58,6 @@ async function loadAllData(requestUrl: string): Promise<StageData[]> {
   dataCache = allStages;
   return allStages;
 }
-
-// ── Search ──
 
 const CONTEXT_RADIUS = 2;
 
@@ -164,7 +160,7 @@ function groupResults(
 }
 // ── Handler ──
 
-export async function handleSearch(request: Request): Promise<Response> {
+export async function handleSearch(request: Request, env: any): Promise<Response> {
   const url = new URL(request.url);
   const q = (url.searchParams.get('q') || '').trim();
   const format = url.searchParams.get('format') || 'html';
@@ -175,8 +171,8 @@ export async function handleSearch(request: Request): Promise<Response> {
     if (format === 'json') {
       return Response.json({ error: 'Missing query parameter: q' }, { status: 400 });
     }
-    const html = ejs.render(searchTemplate, {
-      q: '',
+    const html = renderTemplate({
+      q: "",
       results: [],
       offset: 0,
       limit,
@@ -187,7 +183,7 @@ export async function handleSearch(request: Request): Promise<Response> {
     });
   }
 
-  const data = await loadAllData(request.url);
+  const data = await loadAllData(env);
   const matches = searchInData(data, q);
   const { results, totalCount, hasMore } = groupResults(matches, q, offset, limit);
 
@@ -208,14 +204,20 @@ export async function handleSearch(request: Request): Promise<Response> {
     });
   }
 
-  const html = ejs.render(searchTemplate, {
+  const encodedQ = encodeURIComponent(q);
+  const html = renderTemplate({
     q,
+    encodedQ,
     results,
     offset,
     limit,
     totalCount,
     hasMore,
-    encodeURIComponent: (s: string) => encodeURIComponent(s),
+    nextOffset: offset + limit,
+    showInfo: totalCount > 0,
+    showRange: results.length < totalCount,
+    rangeStart: offset + 1,
+    rangeEnd: Math.min(offset + results.length, totalCount),
   });
   return new Response(html, {
     headers: { 'Content-Type': 'text/html; charset=utf-8' },

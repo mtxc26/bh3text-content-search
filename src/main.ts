@@ -1,19 +1,27 @@
 import { AutoRouter } from 'itty-router';
-import helpHtml from "./pages/help.html"
+import helpHtml from './pages/help.html';
+import notFoundHtml from './pages/404.html';
 import { handleSearch } from './handlers/search.js';
 
-const router = AutoRouter();
+export default {
+  async fetch(request: Request, env: any) {
 
-// Search endpoint
-router.get('/search', handleSearch);
+    const router = AutoRouter();
 
-// Help page
-router.get('/search/help', () => {
-  const html = helpHtml;
-  return new Response(html, {
-    headers: { 'Content-Type': 'text/html; charset=utf-8' },
-  });
-});
+    router.get('/search', req => handleSearch(req, env));
+    router.get('/search/help', () => new Response(helpHtml, {
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    }));
 
-// No catch-all: unmatched requests fall through to static assets
-export default router;
+    router.all('*', (request: Request) => {
+      const url = new URL(request.url);
+      if (url.pathname.startsWith('/all/')) return;
+      return new Response(notFoundHtml, {
+        status: 404,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      });
+    });
+
+    return router.fetch(request) || env.ASSETS.fetch(request);
+  }
+};

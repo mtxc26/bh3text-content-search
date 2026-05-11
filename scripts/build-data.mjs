@@ -175,3 +175,25 @@ main().catch(err => {
   console.error(err);
   process.exit(1);
 });
+
+
+// ── Precompile Handlebars ──
+
+import Handlebars from 'handlebars';
+
+async function precompile() {
+  const tplPath = join(ROOT, 'src', 'pages', 'search.hbs');
+  const template = await readFile(tplPath, 'utf-8');
+  const compiled = Handlebars.precompile(template, { strict: true, preventIndent: true });
+  
+  await mkdir(join(ROOT, "src", "build-cache"), { recursive: true });
+  const outPath = join(ROOT, 'src', 'build-cache', 'search.hbs.js');
+  const code = `// Precompiled Handlebars template: search.hbs
+import Handlebars from 'handlebars';
+export default Handlebars.template(${compiled});
+`;
+  await writeFile(outPath, code, 'utf-8');
+  console.log('  search.hbs precompiled.');
+}
+
+await precompile();
