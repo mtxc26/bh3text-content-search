@@ -8,7 +8,7 @@ export default {
 
     const router = AutoRouter();
 
-    router.get('/search', req => handleSearch(req, env));
+    router.get('/search/', req => handleSearch(req, env));
     router.get('/search/help', () => new Response(helpHtml, {
       headers: { 'Content-Type': 'text/html; charset=utf-8' },
     }));

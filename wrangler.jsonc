@@ -1,6 +1,7 @@
 {
   "assets": {
-    "directory": "./dist/static"
+    "directory": "./dist/static",
+    "binding": "ASSETS"
   },
   "name": "bh3text-content-search",
   "compatibility_date": "2026-05-06",
