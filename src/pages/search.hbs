@@ -1,43 +1,19 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="search-app">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>搜索「{{q}}」 - 《崩坏3》文本搜索</title>
 <meta name="description" content="《崩坏3》对话文本搜索：{{q}}" />
-<link rel="stylesheet" href="https://www.bh3text.com/r/static/basic.css" />
-<link rel="stylesheet" href="https://www.bh3text.com/r/static/style.css" />
-<style>
-.search-box { max-width: 720px; margin: 0 auto; padding: 1rem 1rem 2rem; }
-.search-box form { display: flex; gap: 0.5rem; }
-.search-box input[type=search] { flex: 1; padding: 0.5rem 0.75rem; font-size: 1rem; border: 1px solid #ccc; border-radius: 4px; }
-.search-box button { padding: 0.5rem 1rem; font-size: 1rem; background: #5b8def; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
-.search-box button:hover { background: #4a7de0; }
-.search-info { text-align: center; color: #666; margin: 0.5rem 0; }
-.result-item { max-width: 720px; margin: 1rem auto; padding: 1rem; border: 1px solid #e0e0e0; border-radius: 6px; }
-.result-header { margin-bottom: 0.5rem; }
-.result-header a { font-weight: bold; color: #5b8def; text-decoration: none; }
-.result-header a:hover { text-decoration: underline; }
-.result-header .meta { font-size: 0.85rem; color: #999; margin-left: 0.5rem; }
-.result-lines { font-family: inherit; line-height: 1.8; }
-.dialog-line { margin: 0.25rem 0; }
-.dialog-actor { color: #5b8def; font-weight: 500; margin-right: 0.5rem; }
-.dialog-content { color: #333; }
-.dialog-line.match { background: #fff3cd; border-left: 3px solid #ffc107; padding-left: 0.5rem; margin: 0.25rem -0.5rem; }
-.dialog-line.match .dialog-content { font-weight: 600; }
-mark { background: #ffeb3b; padding: 0 2px; border-radius: 2px; }
-.empty { text-align: center; color: #999; padding: 3rem; font-size: 1.1rem; }
-.pagination { text-align: center; margin: 1.5rem 0; }
-.pagination a { display: inline-block; padding: 0.4rem 0.8rem; margin: 0 0.25rem; border: 1px solid #ddd; border-radius: 4px; color: #5b8def; text-decoration: none; }
-.pagination a:hover { background: #f0f4ff; }
-.pagination .current { display: inline-block; padding: 0.4rem 0.8rem; margin: 0 0.25rem; background: #5b8def; color: #fff; border-radius: 4px; }
-</style>
+<link rel="stylesheet" href="/r/static/basic.css" />
+<link rel="stylesheet" href="/r/static/style.css" />
+<link rel="stylesheet" href="/r/static/search.css" />
 </head>
 <body>
 <a class="skip-link" href="#main-content">转到内容</a>
 <div class="search-box">
   <h1 style="text-align:center;font-size:1.3rem;margin-bottom:0.75rem;">《崩坏3》对话文本搜索</h1>
-  <form action="/search" method="get">
+  <form action="/search/" method="get">
     <input type="search" name="q" value="{{q}}" placeholder="输入关键词搜索..." autofocus />
     <button type="submit">搜索</button>
   </form>
@@ -51,7 +27,7 @@ mark { background: #ffeb3b; padding: 0 2px; border-radius: 2px; }
   {{#each results}}
   <article class="result-item">
     <div class="result-header">
-      <a href="{{url}}" target="_blank" rel="noopener">{{chapterTitle}}</a>
+      <a href="javascript:void 0">{{chapterTitle}}</a>
       <span class="meta">{{stageId}} · {{matchCount}} 条匹配</span>
     </div>
     <div class="result-lines">
@@ -75,10 +51,21 @@ mark { background: #ffeb3b; padding: 0 2px; border-radius: 2px; }
     {{#if q}}
     未找到与「<strong>{{q}}</strong>」相关的结果。<br>请尝试其他关键词。
     {{else}}
-    请输入搜索关键词。
+    <span></span>
     {{/if}}
   </div>
 {{/if}}
 </main>
+
+<footer id=site_footer>
+    <a href="/">首页</a>
+    <span>|</span>
+    <a href="/about/">关于</a>
+    <span>|</span>
+    <div id=privacy_consent></div>
+</footer>
+
+<script type="module" src="/r/runtime/common.js"></script>
+
 </body>
 </html>

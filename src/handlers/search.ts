@@ -165,7 +165,7 @@ export async function handleSearch(request: Request, env: any): Promise<Response
   const q = (url.searchParams.get('q') || '').trim();
   const format = url.searchParams.get('format') || 'html';
   const offset = parseInt(url.searchParams.get('offset') || '0', 10) || 0;
-  const limit = Math.min(parseInt(url.searchParams.get('limit') || '20', 10) || 20, 50);
+  const limit = Math.min(parseInt(url.searchParams.get('limit') || '100', 10) || 100, 1000);
 
   if (!q) {
     if (format === 'json') {
