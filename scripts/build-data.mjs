@@ -9,23 +9,41 @@ const ROOT = join(__dirname, '..');
 const PAGES_SRC = join(ROOT, 'data', 'dist', 'pages');
 const PAGES_DST = join(ROOT, 'dist', 'static', 'all');
 
-// ── Extract flat clean lines from blocks ──
+// ── Strip Unity rich text tags ──
 
-function cleanText(text) {
+function stripUnityTags(text) {
   if (typeof text !== 'string') return '';
-  return text
+  return text.replace(/<[^>]*>/g, '');
 }
+
+// ── Extract lines from blocks ──
 
 function extractLines(blocks) {
   const result = [];
   for (const blk of blocks) {
     if (blk.lines) {
       for (const ln of blk.lines) {
-        const actor = cleanText(ln.actor || '');
-        const content = cleanText(ln.content || '');
-        if (content) {
-          result.push({ a: actor, t: content, tl: content.toLowerCase() });
+        const actor = (ln.actor && typeof ln.actor === 'string') ? ln.actor : '';
+        const content = (ln.content && typeof ln.content === 'string') ? ln.content : '';
+        if (!content) continue;
+
+        const line = { a: actor, t: content };
+
+        // Stripped actor (for actor search)
+        const actor2 = (ln.actor2 && typeof ln.actor2 === 'string') ? ln.actor2 : '';
+        const actorStripped = stripUnityTags(actor2);
+        if (actorStripped !== actor2) {
+          line.A = actorStripped;
         }
+
+        // Stripped content (for search)
+        const content2 = (ln.content2 && typeof ln.content2 === 'string') ? ln.content2 : '';
+        const contentStripped = stripUnityTags(content2);
+        if (contentStripped !== content2) {
+          line.T = contentStripped;
+        }
+
+        result.push(line);
       }
     }
   }
@@ -39,8 +57,8 @@ async function processPages(name) {
   const out = pages.map(pg => ({
     u: pg.u,
     c: pg.c,
-    ct: pg.ct,
-    pt: pg.pt,
+    t: pg.ct,
+    p: pg.pt,
     l: extractLines(pg.blocks),
   }));
   await mkdir(PAGES_DST, { recursive: true });

@@ -5,13 +5,14 @@ import renderTemplate from "../build-cache/search.hbs.js";
 interface DialogLine {
   a: string;
   t: string;
-  tl: string;
+  A?: string;
+  T?: string;
 }
 
 interface StageData {
   c: string;
-  ct: string;
-  pt: string;
+  t: string;
+  p: string;
   u: string;
   l: DialogLine[];
 }
@@ -32,7 +33,6 @@ interface GroupedResult {
 // ── Cache ──
 
 let dataCache: StageData[] | null = null;
-
 let loadingPromise: Promise<StageData[]> | null = null;
 const BASE_URL = 'https://www.bh3text.com';
 const CATEGORIES = ['main1', 'main2', 'er'] as const;
@@ -43,7 +43,6 @@ async function loadAllData(env: any): Promise<StageData[]> {
 
   loadingPromise = (async () => {
     const allStages: StageData[] = [];
-
     for (const cat of CATEGORIES) {
       const req = new Request(`https://local/all/${cat}.json`);
       const resp = await env.ASSETS.fetch(req);
@@ -54,7 +53,6 @@ async function loadAllData(env: any): Promise<StageData[]> {
       }
       allStages.push(...stages);
     }
-
     dataCache = allStages;
     loadingPromise = null;
     return allStages;
@@ -65,59 +63,59 @@ async function loadAllData(env: any): Promise<StageData[]> {
 
 const CONTEXT_RADIUS = 2;
 
-function procColorTag(_: string, c: string, content: string): string {
-    c = c.toLowerCase();
-    if (c === '#ffffffff' || c === '#fff' || c === '#fffff' || c === '#fffffff' || c === '#ffffff')
-        return '<span style="color:#fff">';
-    if (c === '#000000') return '<span style="color:#000">';
-    let alpha = 1;
-    if (c.startsWith('#') && c.length === 10) {
-        alpha = parseInt(c.substring(8), 16) / 255;
-        c = c.substring(0, 7);
-    }
-    if (alpha < 1) return `<span style="color:${c};opacity:${alpha.toFixed(2)}">${content}</span>`;
-    return `<span style="color:${c}">${content}</span>`;
+// ── Search ──
+
+function getSearchText(line: DialogLine): string {
+  return line.T ?? line.t.replace(/<[^>]*>/g, '');
 }
 
-function searchInData(data: StageData[], query: string): SearchMatch[] {
+function getSearchActor(line: DialogLine): string {
+  return line.A ?? line.a.replace(/<[^>]*>/g, '');
+}
+
+function searchInData(data: StageData[], query: string, actor?: string): SearchMatch[] {
   const q = query.toLowerCase();
+  const a = actor?.toLowerCase();
   const matches: SearchMatch[] = [];
 
   for (const stage of data) {
     for (let i = 0; i < stage.l.length; i++) {
-      if (stage.l[i]!.tl.includes(q)) {
-        matches.push({ stage, lineIdx: i });
-      }
+      const line = stage.l[i]!;
+      if (!getSearchText(line).includes(q)) continue;
+      if (a && !getSearchActor(line).includes(a)) continue;
+      matches.push({ stage, lineIdx: i });
     }
   }
 
   return matches;
 }
 
-function highlightText(text: string, query: string): string {
-  let escaped = text
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/<color=(#?\w+)>(.*?)<\/color>/g, procColorTag);
+// ── Highlight ──
 
-  if (!query) return escaped;
-
+function highlightText(html: string, query: string): string {
+  if (!query) return html;
   const qLower = query.toLowerCase();
-  const escLower = escaped.toLowerCase();
-  let result = '';
-  let lastIdx = 0;
-
-  let idx = escLower.indexOf(qLower);
-  while (idx !== -1) {
-    result += escaped.slice(lastIdx, idx);
-    result += '<search-match>' + escaped.slice(idx, idx + query.length) + '</search-match>';
-    lastIdx = idx + query.length;
-    idx = escLower.indexOf(qLower, lastIdx);
-  }
-  result += escaped.slice(lastIdx);
-
-  return result;
+  // Wrap so plain text also has >...< boundaries; only text content is highlighted
+  const wrapped = '>' + html + '<';
+  const re = />([^<]*)</g;
+  const result = wrapped.replace(re, (_match: string, text: string) => {
+    const lower = text.toLowerCase();
+    let out = '';
+    let lastIdx = 0;
+    let idx = lower.indexOf(qLower);
+    while (idx !== -1) {
+      out += text.slice(lastIdx, idx);
+      out += '<search-match>' + text.slice(idx, idx + query.length) + '</search-match>';
+      lastIdx = idx + query.length;
+      idx = lower.indexOf(qLower, lastIdx);
+    }
+    out += text.slice(lastIdx);
+    return '>' + out + '<';
+  });
+  return result.slice(1, -1);
 }
+
+// ── Group ──
 
 function groupResults(
   matches: SearchMatch[],
@@ -157,29 +155,30 @@ function groupResults(
       const isMatch = matchIndices.has(idx);
       return {
         actor: ln.a,
-        content: isMatch ? highlightText(ln.t, query) : highlightText(ln.t, ''),
+        content: isMatch ? highlightText(ln.t, query) : ln.t,
         match: isMatch,
       };
     });
 
     results.push({
       url: stage.u,
-      chapterTitle: stage.ct,
-      pageTitle: stage.pt,
+      chapterTitle: stage.t,
+      pageTitle: stage.p,
       matchCount: matchIndices.size,
       lines,
     });
   }
 
   results.sort((a, b) => b.matchCount - a.matchCount);
-
   return { results, totalCount, hasMore: offset + limit < totalCount };
 }
+
 // ── Handler ──
 
 export async function handleSearch(request: Request, env: any): Promise<Response> {
   const url = new URL(request.url);
   const q = (url.searchParams.get('q') || '').trim();
+  const actor = (url.searchParams.get('a') || '').trim();
   const format = url.searchParams.get('format') || 'html';
   const offset = parseInt(url.searchParams.get('offset') || '0', 10) || 0;
   const limit = Math.min(parseInt(url.searchParams.get('limit') || '100', 10) || 100, 1000);
@@ -201,12 +200,13 @@ export async function handleSearch(request: Request, env: any): Promise<Response
   }
 
   const data = await loadAllData(env);
-  const matches = searchInData(data, q);
+  const matches = searchInData(data, q, actor || undefined);
   const { results, totalCount, hasMore } = groupResults(matches, q, offset, limit);
 
   if (format === 'json') {
     return Response.json({
       query: q,
+      actor: actor || undefined,
       totalCount,
       offset,
       limit,
