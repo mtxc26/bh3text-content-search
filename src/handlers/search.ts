@@ -11,7 +11,7 @@ interface DialogLine {
 interface StageData {
   c: string;
   ct: string;
-  s: string;
+  pt: string;
   u: string;
   l: DialogLine[];
 }
@@ -24,7 +24,7 @@ interface SearchMatch {
 interface GroupedResult {
   url: string;
   chapterTitle: string;
-  stageId: string;
+  pageTitle: string;
   matchCount: number;
   lines: { actor: string; content: string; match: boolean }[];
 }
@@ -165,7 +165,7 @@ function groupResults(
     results.push({
       url: stage.u,
       chapterTitle: stage.ct,
-      stageId: stage.s,
+      pageTitle: stage.pt,
       matchCount: matchIndices.size,
       lines,
     });
@@ -214,7 +214,7 @@ export async function handleSearch(request: Request, env: any): Promise<Response
       results: results.map((r) => ({
         url: r.url,
         chapterTitle: r.chapterTitle,
-        stageId: r.stageId,
+        pageTitle: r.pageTitle,
         matchCount: r.matchCount,
         lines: r.lines,
       })),
