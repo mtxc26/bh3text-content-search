@@ -1,4 +1,5 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { execSync } from 'node:child_process';
 import Handlebars from 'handlebars';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,7 +13,7 @@ const PAGES_DST = join(ROOT, 'dist', 'static', 'all');
 
 function cleanText(text) {
   if (typeof text !== 'string') return '';
-  return text.replace(/<[^>]*>/g, '');
+  return text
 }
 
 function extractLines(blocks) {
@@ -31,7 +32,7 @@ function extractLines(blocks) {
   return result;
 }
 
-// ── Process pages: strip blocks, keep only search-relevant fields ──
+// ── Process pages ──
 
 async function processPages(name) {
   const pages = JSON.parse(await readFile(join(PAGES_SRC, `${name}.json`), 'utf-8'));
@@ -52,8 +53,16 @@ async function processPages(name) {
 // ── Precompile Handlebars ──
 
 async function precompileHandlebars() {
+  const ref = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
+  console.log(`  git ref: ${ref}`);
+
   const tplPath = join(ROOT, 'src', 'pages', 'search.hbs');
-  const template = await readFile(tplPath, 'utf-8');
+  let template = await readFile(tplPath, 'utf-8');
+  template = template.replace(
+    'src="/r/runtime/common.js"',
+    `src="/r/runtime/common.js?ref=search%3Bgit%3A${ref}"`
+  );
+
   const compiled = Handlebars.precompile(template, { strict: true, preventIndent: true });
 
   await mkdir(join(ROOT, 'src', 'build-cache'), { recursive: true });

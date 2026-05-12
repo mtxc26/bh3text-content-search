@@ -196,7 +196,7 @@ export async function handleSearch(request: Request, env: any): Promise<Response
       hasMore: false,
     });
     return new Response(html, {
-      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'max-age=600' },
     });
   }
 
@@ -218,6 +218,8 @@ export async function handleSearch(request: Request, env: any): Promise<Response
         matchCount: r.matchCount,
         lines: r.lines,
       })),
+    }, {
+      headers: { 'Cache-Control': 'max-age=600' },
     });
   }
 
@@ -237,6 +239,6 @@ export async function handleSearch(request: Request, env: any): Promise<Response
     rangeEnd: Math.min(offset + results.length, totalCount),
   });
   return new Response(html, {
-    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=600' },
   });
 }
