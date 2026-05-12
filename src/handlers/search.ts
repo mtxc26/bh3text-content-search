@@ -95,7 +95,6 @@ function searchInData(data: StageData[], query: string, actor?: string): SearchM
 function highlightText(html: string, query: string): string {
   if (!query) return html;
   const qLower = query.toLowerCase();
-  // Wrap so plain text also has >...< boundaries; only text content is highlighted
   const wrapped = '>' + html + '<';
   const re = />([^<]*)</g;
   const result = wrapped.replace(re, (_match: string, text: string) => {
@@ -173,6 +172,15 @@ function groupResults(
   return { results, totalCount, hasMore: offset + limit < totalCount };
 }
 
+// ── Build URL ──
+
+function buildSearchUrl(q: string, actor: string, offset: number, limit: number): string {
+  let url = `/search?q=${encodeURIComponent(q)}`;
+  if (actor) url += `&a=${encodeURIComponent(actor)}`;
+  url += `&offset=${offset}&limit=${limit}`;
+  return url;
+}
+
 // ── Handler ──
 
 export async function handleSearch(request: Request, env: any): Promise<Response> {
@@ -187,13 +195,7 @@ export async function handleSearch(request: Request, env: any): Promise<Response
     if (format === 'json') {
       return Response.json({ error: 'Missing query parameter: q' }, { status: 400 });
     }
-    const html = renderTemplate({
-      q: "",
-      results: [],
-      offset: 0,
-      limit,
-      hasMore: false,
-    });
+    const html = renderTemplate({ q: "", actor: "", results: [], offset: 0, limit, hasMore: false });
     return new Response(html, {
       headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'max-age=600' },
     });
@@ -207,32 +209,21 @@ export async function handleSearch(request: Request, env: any): Promise<Response
     return Response.json({
       query: q,
       actor: actor || undefined,
-      totalCount,
-      offset,
-      limit,
-      hasMore,
-      results: results.map((r) => ({
-        url: r.url,
-        chapterTitle: r.chapterTitle,
-        pageTitle: r.pageTitle,
-        matchCount: r.matchCount,
-        lines: r.lines,
+      totalCount, offset, limit, hasMore,
+      results: results.map(r => ({
+        url: r.url, chapterTitle: r.chapterTitle, pageTitle: r.pageTitle,
+        matchCount: r.matchCount, lines: r.lines,
       })),
-    }, {
-      headers: { 'Cache-Control': 'max-age=600' },
-    });
+    }, { headers: { 'Cache-Control': 'max-age=600' } });
   }
 
-  const encodedQ = encodeURIComponent(q);
+  const prevUrl = offset > 0 ? buildSearchUrl(q, actor, Math.max(0, offset - limit), limit) : '';
+  const nextUrl = hasMore ? buildSearchUrl(q, actor, offset + limit, limit) : '';
+
   const html = renderTemplate({
-    q,
-    encodedQ,
-    results,
-    offset,
-    limit,
-    totalCount,
-    hasMore,
-    nextOffset: offset + limit,
+    q, actor,
+    results, offset, limit, totalCount, hasMore,
+    prevUrl, nextUrl, hasPagination: !!(prevUrl || nextUrl),
     showInfo: totalCount > 0,
     showRange: results.length < totalCount,
     rangeStart: offset + 1,

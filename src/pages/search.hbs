@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>搜索「{{q}}」 - 《崩坏3》文本搜索</title>
-<meta name="description" content="《崩坏3》对话文本搜索：{{q}}" />
+<title>搜索「{{q}}」{{#if actor}} @{{actor}}{{/if}} - 《崩坏3》文本搜索</title>
+<meta name="description" content="《崩坏3》对话文本搜索：{{q}}{{#if actor}} @{{actor}}{{/if}}" />
 <link rel="stylesheet" href="/r/static/basic.css" />
 <link rel="stylesheet" href="/r/static/style.css" />
 <link rel="stylesheet" href="/r/static/search.css" />
@@ -13,12 +13,18 @@
 <a class="skip-link" href="#main-content">转到内容</a>
 <div class="search-box">
   <h1 style="text-align:center;font-size:1.3rem;margin-bottom:0.75rem;">《崩坏3》对话文本搜索</h1>
-  <form action="/search/" method="get">
-    <input type="search" name="q" value="{{q}}" placeholder="输入关键词搜索..." autofocus />
-    <button type="submit">搜索</button>
+  <form action="/search/" method="GET">
+    <div class="search-row">
+      <input type="search" name="q" value="{{q}}" placeholder="输入关键词搜索..." autofocus />
+      <button type="submit">搜索</button>
+    </div>
+    <details class="search-options"{{#if actor}} open{{/if}}>
+      <summary>更多选项</summary>
+      <input type="search" name="a" value="{{actor}}" placeholder="按角色筛选..." />
+    </details>
   </form>
   {{#if showInfo}}
-  <p class="search-info">找到约 {{totalCount}} 条匹配{{#if showRange}}，显示第 {{rangeStart}}-{{rangeEnd}} 条{{/if}}</p>
+  <p class="search-info">找到约 {{totalCount}} 条匹配{{#if actor}} · 角色「{{actor}}」{{/if}}{{#if showRange}}，显示第 {{rangeStart}}-{{rangeEnd}} 条{{/if}}</p>
   {{/if}}
 </div>
 
@@ -33,7 +39,7 @@
     <div class="result-lines">
       {{#each lines}}
       <div class="dialog-line{{#if match}} match{{/if}}">
-        {{#if actor}}<span class="dialog-actor">{{actor}}：</span>{{/if}}
+        {{#if actor}}<span class="dialog-actor">{{{actor}}}：</span>{{/if}}
         <span class="dialog-content">{{{content}}}</span>
       </div>
       {{/each}}
@@ -41,15 +47,16 @@
   </article>
   {{/each}}
 
-  {{#if hasMore}}
+  {{#if hasPagination}}
   <div class="pagination">
-    <a href="/search?q={{encodedQ}}&amp;offset={{nextOffset}}&amp;limit={{limit}}">下一页</a>
+    {{#if prevUrl}}<a href="{{prevUrl}}">上一页</a>{{/if}}
+    {{#if nextUrl}}<a href="{{nextUrl}}">下一页</a>{{/if}}
   </div>
   {{/if}}
 {{else}}
   <div class="empty">
     {{#if q}}
-    未找到与「<strong>{{q}}</strong>」相关的结果。<br>请尝试其他关键词。
+    未找到与「<strong>{{q}}</strong>」{{#if actor}}· 角色「{{actor}}」{{/if}}相关的结果。<br>请尝试其他关键词。
     {{else}}
     <span></span>
     {{/if}}
