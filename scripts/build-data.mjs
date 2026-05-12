@@ -1,7 +1,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import Handlebars from 'handlebars';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { gzipSync } from 'node:zlib';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -28,7 +28,7 @@ function extractLines(dialogLines) {
       : (ln.content || '');
     const content = cleanText(rawContent);
     if (content) {
-      result.push({ a: actor, t: content });
+      result.push({ a: actor, t: content, tl: content.toLowerCase() });
     }
   }
   return result;
@@ -161,11 +161,10 @@ async function main() {
 
   for (const [name, data] of [['main1', main1], ['main2', main2], ['er', er]]) {
     const json = JSON.stringify(data);
-    const gzPath = join(OUT_DIR, `${name}.json.gz`);
-    const compressed = gzipSync(json);
-    await writeFile(gzPath, compressed);
-    const gzSizeMB = (compressed.length / 1024 / 1024).toFixed(2);
-    console.log(`  ${name}.json.gz: ${gzSizeMB} MiB`);
+    const outPath = join(OUT_DIR, `${name}.json`);
+    await writeFile(outPath, json, 'utf-8');
+    const sizeMB = (Buffer.byteLength(json) / 1024 / 1024).toFixed(2);
+    console.log(`  ${name}.json: ${sizeMB} MiB`);
   }
 
   console.log('\nBuild done.');
@@ -179,7 +178,6 @@ main().catch(err => {
 
 // ── Precompile Handlebars ──
 
-import Handlebars from 'handlebars';
 
 async function precompile() {
   const tplPath = join(ROOT, 'src', 'pages', 'search.hbs');

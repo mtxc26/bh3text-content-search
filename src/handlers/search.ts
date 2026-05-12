@@ -1,11 +1,11 @@
 import renderTemplate from "../build-cache/search.hbs.js";
-import { gunzipSync } from "fflate";
 
 // ── Types ──
 
 interface DialogLine {
   a: string;
   t: string;
+  tl: string;
 }
 
 interface StageData {
@@ -33,33 +33,51 @@ interface GroupedResult {
 
 let dataCache: StageData[] | null = null;
 
+let loadingPromise: Promise<StageData[]> | null = null;
 const BASE_URL = 'https://www.bh3text.com';
 const CATEGORIES = ['main1', 'main2', 'er'] as const;
 
 async function loadAllData(env: any): Promise<StageData[]> {
   if (dataCache) return dataCache;
+  if (loadingPromise) return loadingPromise;
 
-  const allStages: StageData[] = [];
+  loadingPromise = (async () => {
+    const allStages: StageData[] = [];
 
-  for (const cat of CATEGORIES) {
-    const req = new Request(`https://local/all/${cat}.json.gz`);
-    const resp = await env.ASSETS.fetch(req);
-    if (!resp.ok) continue;
-    const buf = new Uint8Array(await resp.arrayBuffer());
-    const decompressed = gunzipSync(buf);
-    const text = new TextDecoder().decode(decompressed);
-    const stages = JSON.parse(text) as StageData[];
-    for (const st of stages) {
-      st.u = BASE_URL + st.u;
+    for (const cat of CATEGORIES) {
+      const req = new Request(`https://local/all/${cat}.json`);
+      const resp = await env.ASSETS.fetch(req);
+      if (!resp.ok) continue;
+      const stages = await resp.json() as StageData[];
+      for (const st of stages) {
+        st.u = BASE_URL + st.u;
+      }
+      allStages.push(...stages);
     }
-    allStages.push(...stages);
-  }
 
-  dataCache = allStages;
-  return allStages;
+    dataCache = allStages;
+    loadingPromise = null;
+    return allStages;
+  })();
+
+  return loadingPromise;
 }
 
 const CONTEXT_RADIUS = 2;
+
+function procColorTag(_: string, c: string, content: string): string {
+    c = c.toLowerCase();
+    if (c === '#ffffffff' || c === '#fff' || c === '#fffff' || c === '#fffffff' || c === '#ffffff')
+        return '<span style="color:#fff">';
+    if (c === '#000000') return '<span style="color:#000">';
+    let alpha = 1;
+    if (c.startsWith('#') && c.length === 10) {
+        alpha = parseInt(c.substring(8), 16) / 255;
+        c = c.substring(0, 7);
+    }
+    if (alpha < 1) return `<span style="color:${c};opacity:${alpha.toFixed(2)}">${content}</span>`;
+    return `<span style="color:${c}">${content}</span>`;
+}
 
 function searchInData(data: StageData[], query: string): SearchMatch[] {
   const q = query.toLowerCase();
@@ -67,7 +85,7 @@ function searchInData(data: StageData[], query: string): SearchMatch[] {
 
   for (const stage of data) {
     for (let i = 0; i < stage.l.length; i++) {
-      if (stage.l[i]!.t.toLowerCase().includes(q)) {
+      if (stage.l[i]!.tl.includes(q)) {
         matches.push({ stage, lineIdx: i });
       }
     }
@@ -79,9 +97,8 @@ function searchInData(data: StageData[], query: string): SearchMatch[] {
 function highlightText(text: string, query: string): string {
   let escaped = text
     .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;')
+    .replace(/<color=(#?\w+)>(.*?)<\/color>/g, procColorTag);
 
   if (!query) return escaped;
 
@@ -93,7 +110,7 @@ function highlightText(text: string, query: string): string {
   let idx = escLower.indexOf(qLower);
   while (idx !== -1) {
     result += escaped.slice(lastIdx, idx);
-    result += '<mark>' + escaped.slice(idx, idx + query.length) + '</mark>';
+    result += '<search-match>' + escaped.slice(idx, idx + query.length) + '</search-match>';
     lastIdx = idx + query.length;
     idx = escLower.indexOf(qLower, lastIdx);
   }
