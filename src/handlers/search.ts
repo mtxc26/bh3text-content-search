@@ -204,6 +204,7 @@ export async function handleSearch(request: Request, env: any): Promise<Response
   const data = await loadAllData(env);
   const matches = searchInData(data, q, actor || undefined);
   const { results, totalCount, hasMore } = groupResults(matches, q, offset, limit);
+  for (const r of results) { r.url += "#:~:text=" + encodeURIComponent(q); }
 
   if (format === 'json') {
     return Response.json({
