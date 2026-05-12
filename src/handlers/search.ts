@@ -63,6 +63,50 @@ async function loadAllData(env: any): Promise<StageData[]> {
 
 const CONTEXT_RADIUS = 2;
 
+// ── Query parsing ──
+
+interface SearchToken {
+  raw: string;
+  lower: string;
+  quoted: boolean;
+}
+
+function parseQuery(query: string): SearchToken[] {
+  const tokens: SearchToken[] = [];
+  let i = 0;
+  while (i < query.length) {
+    // Skip whitespace
+    while (i < query.length && query[i] === ' ') i++;
+    if (i >= query.length) break;
+
+    if (query[i] === '"') {
+      // Quoted phrase
+      i++; // skip opening quote
+      let phrase = '';
+      while (i < query.length && query[i] !== '"') {
+        phrase += query[i];
+        i++;
+      }
+      if (i < query.length) i++; // skip closing quote
+      const trimmed = phrase.trim();
+      if (trimmed) {
+        tokens.push({ raw: trimmed, lower: trimmed.toLowerCase(), quoted: true });
+      }
+    } else {
+      // Plain token
+      let word = '';
+      while (i < query.length && query[i] !== ' ' && query[i] !== '"') {
+        word += query[i];
+        i++;
+      }
+      if (word) {
+        tokens.push({ raw: word, lower: word.toLowerCase(), quoted: false });
+      }
+    }
+  }
+  return tokens;
+}
+
 // ── Search ──
 
 function getSearchText(line: DialogLine): string {
@@ -73,15 +117,20 @@ function getSearchActor(line: DialogLine): string {
   return line.A ?? line.a.replace(/<[^>]*>/g, '');
 }
 
-function searchInData(data: StageData[], query: string, actor?: string): SearchMatch[] {
-  const q = query.toLowerCase();
+function searchInData(data: StageData[], tokens: SearchToken[], actor?: string): SearchMatch[] {
   const a = actor?.toLowerCase();
   const matches: SearchMatch[] = [];
 
   for (const stage of data) {
     for (let i = 0; i < stage.l.length; i++) {
       const line = stage.l[i]!;
-      if (!getSearchText(line).includes(q)) continue;
+      const text = getSearchText(line);
+      // All tokens must match
+      let allMatch = true;
+      for (const tok of tokens) {
+        if (!text.includes(tok.lower)) { allMatch = false; break; }
+      }
+      if (!allMatch) continue;
       if (a && !getSearchActor(line).includes(a)) continue;
       matches.push({ stage, lineIdx: i });
     }
@@ -92,23 +141,48 @@ function searchInData(data: StageData[], query: string, actor?: string): SearchM
 
 // ── Highlight ──
 
-function highlightText(html: string, query: string): string {
-  if (!query) return html;
-  const qLower = query.toLowerCase();
+function highlightText(html: string, tokens: SearchToken[]): string {
+  if (!tokens.length) return html;
+
+  // Build array of {lower, length} for each token to highlight
+  const terms = tokens.map(t => ({ lower: t.lower, len: t.raw.length }));
+
   const wrapped = '>' + html + '<';
   const re = />([^<]*)</g;
   const result = wrapped.replace(re, (_match: string, text: string) => {
     const lower = text.toLowerCase();
-    let out = '';
-    let lastIdx = 0;
-    let idx = lower.indexOf(qLower);
-    while (idx !== -1) {
-      out += text.slice(lastIdx, idx);
-      out += '<search-match>' + text.slice(idx, idx + query.length) + '</search-match>';
-      lastIdx = idx + query.length;
-      idx = lower.indexOf(qLower, lastIdx);
+    // Find all match intervals
+    const intervals: [number, number][] = [];
+    for (const term of terms) {
+      let idx = lower.indexOf(term.lower);
+      while (idx !== -1) {
+        intervals.push([idx, idx + term.len]);
+        idx = lower.indexOf(term.lower, idx + 1);
+      }
     }
-    out += text.slice(lastIdx);
+    if (!intervals.length) return '>' + text + '<';
+
+    // Merge overlapping intervals
+    intervals.sort((a, b) => a[0] - b[0]);
+    const merged: [number, number][] = [intervals[0]!];
+    for (let i = 1; i < intervals.length; i++) {
+      const last = merged[merged.length - 1]!;
+      if (intervals[i]![0] <= last[1]) {
+        last[1] = Math.max(last[1], intervals[i]![1]);
+      } else {
+        merged.push(intervals[i]!);
+      }
+    }
+
+    // Build highlighted output
+    let out = '';
+    let pos = 0;
+    for (const [s, e] of merged) {
+      out += text.slice(pos, s);
+      out += '<search-match>' + text.slice(s, e) + '</search-match>';
+      pos = e;
+    }
+    out += text.slice(pos);
     return '>' + out + '<';
   });
   return result.slice(1, -1);
@@ -118,7 +192,7 @@ function highlightText(html: string, query: string): string {
 
 function groupResults(
   matches: SearchMatch[],
-  query: string,
+  tokens: SearchToken[],
   offset: number,
   limit: number,
 ): {
@@ -153,7 +227,7 @@ function groupResults(
       const isMatch = matchIndices.has(idx);
       return {
         actor: ln.a,
-        content: isMatch ? highlightText(ln.t, query) : ln.t,
+        content: isMatch ? highlightText(ln.t, tokens) : ln.t,
         match: isMatch,
       };
     });
@@ -205,10 +279,11 @@ export async function handleSearch(request: Request, env: any): Promise<Response
   }
 
   const data = await loadAllData(env);
-  const matches = searchInData(data, q, actor || undefined);
-  const { results, totalCount, hasMore } = groupResults(matches, q, offset, limit);
+  const tokens = parseQuery(q);
+  const matches = searchInData(data, tokens, actor || undefined);
+  const { results, totalCount, hasMore } = groupResults(matches, tokens, offset, limit);
   const matchTotalCount = matches.length;
-  for (const r of results) { r.url += "#:~:text=" + encodeURIComponent(q); }
+  if (tokens.length === 1 && !tokens[0]!.quoted) { for (const r of results) { r.url += "#:~:text=" + encodeURIComponent(q); } }
 
   if (format === 'json') {
     return Response.json({
