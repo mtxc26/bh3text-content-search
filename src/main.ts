@@ -10,7 +10,7 @@ export default {
 
     router.get('/search/', req => handleSearch(req, env));
     router.get('/search/help', () => new Response(helpHtml, {
-      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=604800' },
     }));
 
     router.all('*', (request: Request) => {

@@ -126,18 +126,17 @@ function groupResults(
   totalCount: number;
   hasMore: boolean;
 } {
-  const totalCount = matches.length;
-  const pageMatches = matches.slice(offset, offset + limit);
-
+  // Group ALL matches into stages first
   const stageMap = new Map<StageData, Set<number>>();
-  for (const m of pageMatches) {
+  for (const m of matches) {
     if (!stageMap.has(m.stage)) {
       stageMap.set(m.stage, new Set());
     }
     stageMap.get(m.stage)!.add(m.lineIdx);
   }
 
-  const results: GroupedResult[] = [];
+  // Build all result items
+  const allResults: GroupedResult[] = [];
   for (const [stage, matchIndices] of stageMap) {
     const linesToInclude = new Set<number>();
     for (const idx of matchIndices) {
@@ -159,7 +158,7 @@ function groupResults(
       };
     });
 
-    results.push({
+    allResults.push({
       url: stage.u,
       chapterTitle: stage.t,
       pageTitle: stage.p,
@@ -168,7 +167,11 @@ function groupResults(
     });
   }
 
-  results.sort((a, b) => b.matchCount - a.matchCount);
+  allResults.sort((a, b) => b.matchCount - a.matchCount);
+
+  const totalCount = allResults.length;
+  const results = allResults.slice(offset, offset + limit);
+
   return { results, totalCount, hasMore: offset + limit < totalCount };
 }
 
@@ -204,6 +207,7 @@ export async function handleSearch(request: Request, env: any): Promise<Response
   const data = await loadAllData(env);
   const matches = searchInData(data, q, actor || undefined);
   const { results, totalCount, hasMore } = groupResults(matches, q, offset, limit);
+  const matchTotalCount = matches.length;
   for (const r of results) { r.url += "#:~:text=" + encodeURIComponent(q); }
 
   if (format === 'json') {
@@ -225,7 +229,8 @@ export async function handleSearch(request: Request, env: any): Promise<Response
     q, actor,
     results, offset, limit, totalCount, hasMore,
     prevUrl, nextUrl, hasPagination: !!(prevUrl || nextUrl),
-    showInfo: totalCount > 0,
+    showInfo: matchTotalCount > 0,
+    matchTotalCount,
     showRange: results.length < totalCount,
     rangeStart: offset + 1,
     rangeEnd: Math.min(offset + results.length, totalCount),

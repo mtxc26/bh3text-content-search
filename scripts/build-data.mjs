@@ -71,15 +71,13 @@ async function processPages(name) {
 // ── Precompile Handlebars ──
 
 async function precompileHandlebars() {
-  const ref = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
+  const ref = execSync('git rev-parse HEAD', { encoding: 'utf-8' }).trim();
   console.log(`  git ref: ${ref}`);
 
   const tplPath = join(ROOT, 'src', 'pages', 'search.hbs');
   let template = await readFile(tplPath, 'utf-8');
-  template = template.replace(
-    'src="/r/runtime/common.js"',
-    `src="/r/runtime/common.js?ref=search%3Bgit%3A${ref}"`
-  );
+  // Append git ref to all /r/ assets for cache busting
+  template = template.replace(/"(\/r\/[^"]+)"/g, `"$1?ref=search%3Bgit%3A${ref}"`);
 
   const compiled = Handlebars.precompile(template, { strict: true, preventIndent: true });
 
