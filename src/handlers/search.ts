@@ -50,9 +50,9 @@ async function loadAllData(env: any): Promise<StageData[]> {
       const resp = await env.ASSETS.fetch(req);
       if (!resp.ok) continue;
       const stages = await resp.json() as StageData[];
-      for (const st of stages) {
+      /*for (const st of stages) {
         st.u = BASE_URL + st.u;
-      }
+      }*/
       allStages.push(...stages);
     }
     dataCache = allStages;
@@ -238,7 +238,7 @@ function groupResults(
         content: isMatch ? highlightText(ln.t, tokens) : ln.t,
         match: isMatch,
         lineId: ln.i,
-        lineUrl: isMatch ? (stage.u + "#" + ln.i) : undefined,
+        lineUrl: stage.u + "#" + ln.i,
       });
     }
 
