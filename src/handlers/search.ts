@@ -5,6 +5,7 @@ import renderTemplate from "../build-cache/search.hbs.js";
 interface DialogLine {
   a: string;
   t: string;
+  i: string;
   A?: string;
   T?: string;
 }
@@ -24,10 +25,11 @@ interface SearchMatch {
 
 interface GroupedResult {
   url: string;
+  stageId: string;
   chapterTitle: string;
   pageTitle: string;
   matchCount: number;
-  lines: { actor: string; content: string; match: boolean }[];
+  lines: { actor: string; content: string; match: boolean; lineId?: string; lineUrl?: string; separator?: boolean }[];
 }
 
 // ── Cache ──
@@ -222,18 +224,30 @@ function groupResults(
     }
 
     const sortedIndices = [...linesToInclude].sort((a, b) => a - b);
-    const lines = sortedIndices.map((idx) => {
+    const lines: { actor: string; content: string; match: boolean; lineId?: string; lineUrl?: string; separator?: boolean }[] = [];
+    for (let k = 0; k < sortedIndices.length; k++) {
+      // Insert separator if gap > 1
+      if (k > 0 && sortedIndices[k]! - sortedIndices[k-1]! > 1) {
+        lines.push({ actor: '', content: '', match: false, separator: true });
+      }
+      const idx = sortedIndices[k]!;
       const ln = stage.l[idx]!;
       const isMatch = matchIndices.has(idx);
-      return {
+      lines.push({
         actor: ln.a,
         content: isMatch ? highlightText(ln.t, tokens) : ln.t,
         match: isMatch,
-      };
-    });
+        lineId: ln.i,
+        lineUrl: isMatch ? (stage.u + "#" + ln.i) : undefined,
+      });
+    }
+
+    const firstMatchId = stage.l[Math.min(...matchIndices)]!.i;
+    const stageNum = firstMatchId.split('_')[1]!;
 
     allResults.push({
-      url: stage.u,
+      url: stage.u + "#stage_" + stageNum,
+      stageId: "stage_" + stageNum,
       chapterTitle: stage.t,
       pageTitle: stage.p,
       matchCount: matchIndices.size,
@@ -283,7 +297,6 @@ export async function handleSearch(request: Request, env: any): Promise<Response
   const matches = searchInData(data, tokens, actor || undefined);
   const { results, totalCount, hasMore } = groupResults(matches, tokens, offset, limit);
   const matchTotalCount = matches.length;
-  if (tokens.length === 1 && !tokens[0]!.quoted) { for (const r of results) { r.url += "#:~:text=" + encodeURIComponent(q); } }
 
   if (format === 'json') {
     return Response.json({
@@ -311,6 +324,6 @@ export async function handleSearch(request: Request, env: any): Promise<Response
     rangeEnd: Math.min(offset + results.length, totalCount),
   });
   return new Response(html, {
-    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=600' },
+    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'max-age=600' },
   });
 }

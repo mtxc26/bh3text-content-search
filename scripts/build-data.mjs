@@ -20,14 +20,14 @@ function stripUnityTags(text) {
 
 function extractLines(blocks) {
   const result = [];
-  for (const blk of blocks) {
+  blocks.forEach((blk, bi) => {
     if (blk.lines) {
-      for (const ln of blk.lines) {
+      blk.lines.forEach((ln, li) => {
         const actor = (ln.actor && typeof ln.actor === 'string') ? ln.actor : '';
         const content = (ln.content && typeof ln.content === 'string') ? ln.content : '';
-        if (!content) continue;
+        if (!content) return;
 
-        const line = { a: actor, t: content };
+        const line = { a: actor, t: content, i: `content_${bi+1}_${li+1}` };
 
         // Stripped actor (for actor search)
         const actor2 = (ln.actor2 && typeof ln.actor2 === 'string') ? ln.actor2 : '';
@@ -44,9 +44,9 @@ function extractLines(blocks) {
         }
 
         result.push(line);
-      }
+      });
     }
-  }
+  });
   return result;
 }
 
