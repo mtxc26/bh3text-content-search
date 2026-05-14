@@ -3,7 +3,7 @@ import helpHtml from './pages/help.html';
 import notFoundHtml from './pages/404.html';
 import { handleSearch } from './handlers/search.js';
 
-const CSP = "frame-ancestors 'self'; base-uri 'none'; manifest-src 'self'; script-src-attr 'none'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' data:; worker-src 'self'";
+const CSP = "frame-ancestors 'self'; base-uri 'self'; manifest-src 'self'; script-src-attr 'none'; script-src 'self' https://staticassets.bh3text.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' data:; worker-src 'self'";
 
 export default {
   async fetch(request: Request, env: any) {
