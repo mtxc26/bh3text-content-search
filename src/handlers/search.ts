@@ -1,4 +1,10 @@
 import renderTemplate from "../build-cache/search.hbs.js";
+import yn from "yn";
+
+const BASE_URL = 'https://www.bh3text.com';
+const CATEGORIES = ['main1', 'main2', 'er'] as const;
+const CONTEXT_RADIUS = 2;
+const HTML_TAG_RE = /<[^>]*>/g;
 
 // ── Types ──
 
@@ -23,21 +29,34 @@ interface SearchMatch {
   lineIdx: number;
 }
 
+interface GroupedLine {
+  actor: string;
+  content: string;
+  match: boolean;
+  lineId?: string;
+  lineUrl?: string;
+  separator?: boolean;
+}
+
 interface GroupedResult {
   url: string;
   stageId: string;
   chapterTitle: string;
   pageTitle: string;
   matchCount: number;
-  lines: { actor: string; content: string; match: boolean; lineId?: string; lineUrl?: string; separator?: boolean }[];
+  lines: GroupedLine[];
 }
+
+type SearchMode =
+  | { kind: 'plain'; tokens: SearchToken[] }
+  | { kind: 'regex'; regex: RegExp };
 
 // ── Cache ──
 
 let dataCache: StageData[] | null = null;
 let loadingPromise: Promise<StageData[]> | null = null;
-const BASE_URL = 'https://www.bh3text.com';
-const CATEGORIES = ['main1', 'main2', 'er'] as const;
+const textCache = new WeakMap<DialogLine, string>();
+const actorCache = new WeakMap<DialogLine, string>();
 
 async function loadAllData(env: any): Promise<StageData[]> {
   if (dataCache) return dataCache;
@@ -49,7 +68,7 @@ async function loadAllData(env: any): Promise<StageData[]> {
       const req = new Request(`https://local/all/${cat}.json`);
       const resp = await env.ASSETS.fetch(req);
       if (!resp.ok) continue;
-      const stages = await resp.json() as StageData[];
+      const stages = (await resp.json()) as StageData[];
       /*for (const st of stages) {
         st.u = BASE_URL + st.u;
       }*/
@@ -63,8 +82,6 @@ async function loadAllData(env: any): Promise<StageData[]> {
   return loadingPromise;
 }
 
-const CONTEXT_RADIUS = 2;
-
 // ── Query parsing ──
 
 interface SearchToken {
@@ -77,25 +94,22 @@ function parseQuery(query: string): SearchToken[] {
   const tokens: SearchToken[] = [];
   let i = 0;
   while (i < query.length) {
-    // Skip whitespace
     while (i < query.length && query[i] === ' ') i++;
     if (i >= query.length) break;
 
     if (query[i] === '"') {
-      // Quoted phrase
-      i++; // skip opening quote
+      i++;
       let phrase = '';
       while (i < query.length && query[i] !== '"') {
         phrase += query[i];
         i++;
       }
-      if (i < query.length) i++; // skip closing quote
+      if (i < query.length) i++;
       const trimmed = phrase.trim();
       if (trimmed) {
         tokens.push({ raw: trimmed, lower: trimmed.toLowerCase(), quoted: true });
       }
     } else {
-      // Plain token
       let word = '';
       while (i < query.length && query[i] !== ' ' && query[i] !== '"') {
         word += query[i];
@@ -109,31 +123,82 @@ function parseQuery(query: string): SearchToken[] {
   return tokens;
 }
 
-// ── Search ──
+
+function parseNonNegativeInt(value: string | null, fallback: number): number {
+  if (value == null) return fallback;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function parsePositiveInt(value: string | null, fallback: number): number {
+  if (value == null) return fallback;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function parseSearchMode(query: string, regexEnabled: boolean, flags: string): SearchMode | { error: string } {
+  if (!regexEnabled) {
+    const tokens = parseQuery(query);
+    return { kind: 'plain', tokens };
+  }
+
+  try {
+    return { kind: 'regex', regex: new RegExp(query, flags) };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { error: `正则表达式无效：${message}` };
+  }
+}
+
+// ── Text helpers ──
 
 function getSearchText(line: DialogLine): string {
-  return line.T ?? line.t.replace(/<[^>]*>/g, '');
+  const cached = textCache.get(line);
+  if (cached !== undefined) return cached;
+  const text = line.T ?? line.t.replace(HTML_TAG_RE, '');
+  textCache.set(line, text);
+  return text;
 }
 
 function getSearchActor(line: DialogLine): string {
-  return line.A ?? line.a.replace(/<[^>]*>/g, '');
+  const cached = actorCache.get(line);
+  if (cached !== undefined) return cached;
+  const actor = line.A ?? line.a.replace(HTML_TAG_RE, '');
+  actorCache.set(line, actor);
+  return actor;
 }
 
-function searchInData(data: StageData[], tokens: SearchToken[], actor?: string): SearchMatch[] {
+// ── Search ──
+
+function searchInData(data: StageData[], mode: SearchMode, actor?: string): SearchMatch[] {
   const a = actor?.toLowerCase();
   const matches: SearchMatch[] = [];
 
-  for (const stage of data) {
+  for (let stageIdx = 0; stageIdx < data.length; stageIdx++) {
+    const stage = data[stageIdx]!;
     for (let i = 0; i < stage.l.length; i++) {
       const line = stage.l[i]!;
-      const text = getSearchText(line);
-      // All tokens must match
-      let allMatch = true;
-      for (const tok of tokens) {
-        if (!text.includes(tok.lower)) { allMatch = false; break; }
-      }
-      if (!allMatch) continue;
+
       if (a && !getSearchActor(line).includes(a)) continue;
+
+      const text = getSearchText(line);
+      let matched = false;
+
+      if (mode.kind === 'plain') {
+        const lowerText = text.toLowerCase();
+        matched = true;
+        for (let t = 0; t < mode.tokens.length; t++) {
+          if (!lowerText.includes(mode.tokens[t]!.lower)) {
+            matched = false;
+            break;
+          }
+        }
+      } else {
+        mode.regex.lastIndex = 0;
+        matched = mode.regex.test(text);
+      }
+
+      if (!matched) continue;
       matches.push({ stage, lineIdx: i });
     }
   }
@@ -143,50 +208,85 @@ function searchInData(data: StageData[], tokens: SearchToken[], actor?: string):
 
 // ── Highlight ──
 
+function mergeIntervals(intervals: [number, number][]): [number, number][] {
+  if (!intervals.length) return intervals;
+  intervals.sort((a, b) => a[0] - b[0]);
+  const merged: [number, number][] = [intervals[0]!];
+  for (let i = 1; i < intervals.length; i++) {
+    const current = intervals[i]!;
+    const last = merged[merged.length - 1]!;
+    if (current[0] <= last[1]) {
+      last[1] = Math.max(last[1], current[1]);
+    } else {
+      merged.push(current);
+    }
+  }
+  return merged;
+}
+
+function highlightIntervals(text: string, intervals: [number, number][]): string {
+  if (!intervals.length) return text;
+  const merged = mergeIntervals(intervals);
+  let out = '';
+  let pos = 0;
+  for (let i = 0; i < merged.length; i++) {
+    const [start, end] = merged[i]!;
+    out += text.slice(pos, start);
+    out += '<search-match>' + text.slice(start, end) + '</search-match>';
+    pos = end;
+  }
+  out += text.slice(pos);
+  return out;
+}
+
 function highlightText(html: string, tokens: SearchToken[]): string {
   if (!tokens.length) return html;
 
-  // Build array of {lower, length} for each token to highlight
-  const terms = tokens.map(t => ({ lower: t.lower, len: t.raw.length }));
-
+  const terms = tokens.map(token => ({ lower: token.lower, len: token.raw.length }));
   const wrapped = '>' + html + '<';
   const re = />([^<]*)</g;
+
   const result = wrapped.replace(re, (_match: string, text: string) => {
     const lower = text.toLowerCase();
-    // Find all match intervals
     const intervals: [number, number][] = [];
-    for (const term of terms) {
+
+    for (let i = 0; i < terms.length; i++) {
+      const term = terms[i]!;
       let idx = lower.indexOf(term.lower);
       while (idx !== -1) {
         intervals.push([idx, idx + term.len]);
         idx = lower.indexOf(term.lower, idx + 1);
       }
     }
-    if (!intervals.length) return '>' + text + '<';
 
-    // Merge overlapping intervals
-    intervals.sort((a, b) => a[0] - b[0]);
-    const merged: [number, number][] = [intervals[0]!];
-    for (let i = 1; i < intervals.length; i++) {
-      const last = merged[merged.length - 1]!;
-      if (intervals[i]![0] <= last[1]) {
-        last[1] = Math.max(last[1], intervals[i]![1]);
-      } else {
-        merged.push(intervals[i]!);
-      }
-    }
-
-    // Build highlighted output
-    let out = '';
-    let pos = 0;
-    for (const [s, e] of merged) {
-      out += text.slice(pos, s);
-      out += '<search-match>' + text.slice(s, e) + '</search-match>';
-      pos = e;
-    }
-    out += text.slice(pos);
-    return '>' + out + '<';
+    return intervals.length ? '>' + highlightIntervals(text, intervals) + '<' : '>' + text + '<';
   });
+
+  return result.slice(1, -1);
+}
+
+function highlightRegexText(html: string, regex: RegExp): string {
+  const wrapped = '>' + html + '<';
+  const re = />([^<]*)</g;
+  const highlightFlags = regex.flags.includes('g') ? regex.flags : `${regex.flags}g`;
+  const highlightRegex = new RegExp(regex.source, highlightFlags);
+
+  const result = wrapped.replace(re, (_match: string, text: string) => {
+    const intervals: [number, number][] = [];
+    highlightRegex.lastIndex = 0;
+
+    let execResult: RegExpExecArray | null;
+    while ((execResult = highlightRegex.exec(text)) !== null) {
+      const matchText = execResult[0];
+      if (!matchText) {
+        return '>' + text + '<';
+      }
+      intervals.push([execResult.index, execResult.index + matchText.length]);
+    }
+
+    return intervals.length ? '>' + highlightIntervals(text, intervals) + '<' : '>' + text + '<';
+  });
+
   return result.slice(1, -1);
 }
 
@@ -194,7 +294,7 @@ function highlightText(html: string, tokens: SearchToken[]): string {
 
 function groupResults(
   matches: SearchMatch[],
-  tokens: SearchToken[],
+  mode: SearchMode,
   offset: number,
   limit: number,
 ): {
@@ -202,20 +302,26 @@ function groupResults(
   totalCount: number;
   hasMore: boolean;
 } {
-  // Group ALL matches into stages first
-  const stageMap = new Map<StageData, Set<number>>();
-  for (const m of matches) {
-    if (!stageMap.has(m.stage)) {
-      stageMap.set(m.stage, new Set());
+  const stageMap = new Map<StageData, { matchIndices: Set<number>; firstIdx: number }>();
+
+  for (let i = 0; i < matches.length; i++) {
+    const match = matches[i]!;
+    let bucket = stageMap.get(match.stage);
+    if (!bucket) {
+      bucket = { matchIndices: new Set<number>(), firstIdx: match.lineIdx };
+      stageMap.set(match.stage, bucket);
     }
-    stageMap.get(m.stage)!.add(m.lineIdx);
+    bucket.matchIndices.add(match.lineIdx);
+    if (match.lineIdx < bucket.firstIdx) {
+      bucket.firstIdx = match.lineIdx;
+    }
   }
 
-  // Build all result items
   const allResults: GroupedResult[] = [];
-  for (const [stage, matchIndices] of stageMap) {
+
+  for (const [stage, bucket] of stageMap) {
     const linesToInclude = new Set<number>();
-    for (const idx of matchIndices) {
+    for (const idx of bucket.matchIndices) {
       const start = Math.max(0, idx - CONTEXT_RADIUS);
       const end = Math.min(stage.l.length - 1, idx + CONTEXT_RADIUS);
       for (let j = start; j <= end; j++) {
@@ -223,34 +329,37 @@ function groupResults(
       }
     }
 
-    const sortedIndices = [...linesToInclude].sort((a, b) => a - b);
-    const lines: { actor: string; content: string; match: boolean; lineId?: string; lineUrl?: string; separator?: boolean }[] = [];
+    const sortedIndices = Array.from(linesToInclude).sort((a, b) => a - b);
+    const lines: GroupedLine[] = [];
+
     for (let k = 0; k < sortedIndices.length; k++) {
-      // Insert separator if gap > 1
-      if (k > 0 && sortedIndices[k]! - sortedIndices[k-1]! > 1) {
+      if (k > 0 && sortedIndices[k]! - sortedIndices[k - 1]! > 1) {
         lines.push({ actor: '', content: '', match: false, separator: true });
       }
+
       const idx = sortedIndices[k]!;
       const ln = stage.l[idx]!;
-      const isMatch = matchIndices.has(idx);
+      const isMatch = bucket.matchIndices.has(idx);
       lines.push({
         actor: ln.a,
-        content: isMatch ? highlightText(ln.t, tokens) : ln.t,
+        content: isMatch
+          ? (mode.kind === 'plain' ? highlightText(ln.t, mode.tokens) : highlightRegexText(ln.t, mode.regex))
+          : ln.t,
         match: isMatch,
         lineId: ln.i,
-        lineUrl: stage.u + "#" + ln.i,
+        lineUrl: stage.u + '#' + ln.i,
       });
     }
 
-    const firstMatchId = stage.l[Math.min(...matchIndices)]!.i;
-    const stageNum = firstMatchId.split('_')[1]!;
+    const firstMatchId = stage.l[bucket.firstIdx]!.i;
+    const stageNum = firstMatchId.split('_')[1] || firstMatchId;
 
     allResults.push({
-      url: stage.u + "#stage_" + stageNum,
-      stageId: "stage_" + stageNum,
+      url: stage.u + '#stage_' + stageNum,
+      stageId: 'stage_' + stageNum,
       chapterTitle: stage.t,
       pageTitle: stage.p,
-      matchCount: matchIndices.size,
+      matchCount: bucket.matchIndices.size,
       lines,
     });
   }
@@ -263,66 +372,71 @@ function groupResults(
   return { results, totalCount, hasMore: offset + limit < totalCount };
 }
 
-// ── Build URL ──
-
-function buildSearchUrl(q: string, actor: string, offset: number, limit: number): string {
-  let url = `/search?q=${encodeURIComponent(q)}`;
-  if (actor) url += `&a=${encodeURIComponent(actor)}`;
-  url += `&offset=${offset}&limit=${limit}`;
-  return url;
-}
-
 // ── Handler ──
 
 export async function handleSearch(request: Request, env: any): Promise<Response> {
   const url = new URL(request.url);
   const q = (url.searchParams.get('q') || '').trim();
   const actor = (url.searchParams.get('a') || '').trim();
-  const format = url.searchParams.get('format') || 'html';
-  const offset = parseInt(url.searchParams.get('offset') || '0', 10) || 0;
-  const limit = Math.min(parseInt(url.searchParams.get('limit') || '100', 10) || 100, 1000);
+  const format = (url.searchParams.get('format') || 'html').trim().toLowerCase();
+  const regexEnabled = !!yn(url.searchParams.get('regex'));
+  const flags = (url.searchParams.get('flags') || '').trim();
+  const offset = parseNonNegativeInt(url.searchParams.get('offset'), 0);
+  const limit = Math.min(parsePositiveInt(url.searchParams.get('limit'), 100), 1000);
 
   if (!q) {
     if (format === 'json') {
       return Response.json({ error: 'Missing query parameter: q' }, { status: 400 });
     }
-    const html = renderTemplate({ q: "", actor: "", results: [], offset: 0, limit, hasMore: false });
+    const html = renderTemplate({ q: "", actor: "", regex: regexEnabled, flags, results: [], offset: 0, limit, hasMore: false, searchOptionsOpen: Boolean(actor || regexEnabled || flags) });
     return new Response(html, {
       headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'max-age=600' },
     });
   }
 
+  const mode = parseSearchMode(q, regexEnabled, flags);
+  if ('error' in mode) {
+    if (format === 'json') {
+      return Response.json({ error: mode.error }, { status: 400 });
+    }
+
+    const html = renderTemplate({ q, actor, regex: regexEnabled, flags, results: [], offset, limit, hasMore: false, errorMessage: mode.error, searchOptionsOpen: Boolean(actor || regexEnabled || flags || mode.error) });
+    return new Response(html, {
+      status: 400,
+      headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'max-age=600' },
+    });
+  }
+
   const data = await loadAllData(env);
-  const tokens = parseQuery(q);
-  const matches = searchInData(data, tokens, actor || undefined);
-  const { results, totalCount, hasMore } = groupResults(matches, tokens, offset, limit);
+  const matches = searchInData(data, mode, actor || undefined);
+  const { results, totalCount, hasMore } = groupResults(matches, mode, offset, limit);
   const matchTotalCount = matches.length;
 
   if (format === 'json') {
     return Response.json({
       query: q,
       actor: actor || undefined,
-      totalCount, offset, limit, hasMore,
+      regex: regexEnabled,
+      flags: regexEnabled ? flags : undefined,
+      totalCount,
+      offset,
+      limit,
+      hasMore,
       results: results.map(r => ({
-        url: r.url, chapterTitle: r.chapterTitle, pageTitle: r.pageTitle,
-        matchCount: r.matchCount, lines: r.lines,
+        url: r.url,
+        chapterTitle: r.chapterTitle,
+        pageTitle: r.pageTitle,
+        matchCount: r.matchCount,
+        lines: r.lines,
       })),
     }, { headers: { 'Cache-Control': 'max-age=600' } });
   }
 
-  const prevUrl = offset > 0 ? buildSearchUrl(q, actor, Math.max(0, offset - limit), limit) : '';
-  const nextUrl = hasMore ? buildSearchUrl(q, actor, offset + limit, limit) : '';
+  const prevUrl = offset > 0 ? buildSearchUrl(q, actor, regexEnabled, flags, Math.max(0, offset - limit), limit) : '';
+  const nextUrl = hasMore ? buildSearchUrl(q, actor, regexEnabled, flags, offset + limit, limit) : '';
 
-  const html = renderTemplate({
-    q, actor,
-    results, offset, limit, totalCount, hasMore,
-    prevUrl, nextUrl, hasPagination: !!(prevUrl || nextUrl),
-    showInfo: matchTotalCount > 0,
-    matchTotalCount,
-    showRange: results.length < totalCount,
-    rangeStart: offset + 1,
-    rangeEnd: Math.min(offset + results.length, totalCount),
-  });
+  const html = renderTemplate({ q, actor, regex: regexEnabled, flags, results, offset, limit, totalCount, hasMore, prevUrl, nextUrl, hasPagination: !!(prevUrl || nextUrl), showInfo: matchTotalCount > 0, matchTotalCount, showRange: results.length < totalCount, rangeStart: offset + 1, rangeEnd: Math.min(offset + results.length, totalCount), searchOptionsOpen: Boolean(actor || regexEnabled || flags) });
+
   return new Response(html, {
     headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'max-age=600' },
   });

@@ -4,26 +4,32 @@
 <ul>
 <li><strong>空格分隔</strong>：多个关键词用空格分隔，匹配<em>同时包含</em>所有关键词的行。<br><code>琪亚娜 芽衣</code> → 同时包含「琪亚娜」和「芽衣」的对话</li>
 <li><strong>引号精确匹配</strong>：用双引号包裹，匹配完整短语（含空格）。<br><code>"出击"</code> → 精确匹配「出击」<br><code>"琪亚娜 出击"</code> → 精确匹配含空格的完整短语</li>
+<li><strong>正则表达式模式</strong>：设置 <code>regex=1</code> 后，<code>q</code> 会直接按 <code>new RegExp(q, flags)</code> 解释，不再进行空格拆分。<code>flags</code> 参数可填写 <code>gi</code>、<code>m</code> 等标志。<br><code>q=琪亚娜.*芽衣&amp;regex=1</code> → 使用正则匹配同时包含两者的行</li>
 </ul>
 
 <h2>HTML 搜索</h2>
 <pre><code>GET /search?q={关键词}</code></pre>
 <p>参数：</p>
 <ul>
-<li><code>q</code> - 搜索关键词（支持空格多关键词 + 引号短语）</li>
-<li><code>a</code> - 按角色筛选（可选）</li>
+<li><code>q</code> - 搜索关键词；在普通模式下支持空格多关键词 + 引号短语，在正则模式下直接作为正则表达式主体</li>
+<li><code>a</code> - 按角色筛选（可选，仍然是普通文本筛选，可与正则正文搜索同时使用）</li>
+<li><code>regex</code> - 是否启用正则表达式搜索（可选，复选框参数）</li>
+<li><code>flags</code> - 正则标志（可选，例如 <code>gi</code>）</li>
 <li><code>offset</code> - 结果偏移量（默认 0）</li>
 <li><code>limit</code> - 每页结果数（默认 100，最大 1000）</li>
 </ul>
 
 <h2>JSON API</h2>
 <pre><code>GET /search?q={关键词}&amp;format=json</code></pre>
+<p>JSON API 接受与 HTML 搜索相同的参数：<code>a</code>、<code>regex</code>、<code>flags</code>、<code>offset</code>、<code>limit</code>。</p>
 
 <h2>示例</h2>
 <pre><code>GET /search?q=琪亚娜
 GET /search?q=琪亚娜 芽衣
 GET /search?q="琪亚娜 出击"
 GET /search?q=布洛妮娅&amp;a=希儿
-GET /search?q=芽衣&amp;format=json</code></pre>
+GET /search?q=芽衣&amp;format=json
+GET /search?q=琪亚娜.*芽衣&amp;regex=1
+GET /search?q=芽衣&amp;regex=1&amp;flags=i</code></pre>
 
 <footer id=site_footer><a href="/">首页</a><span>|</span><a href="/about/">关于</a><span>|</span><div id=privacy_consent></div></footer><script type="module" src="/r/runtime/common.js"></script></body></html>
