@@ -150,6 +150,19 @@ function parseSearchMode(query: string, regexEnabled: boolean, flags: string): S
   }
 }
 
+// ── URL Builder ──
+
+function buildSearchUrl(q: string, actor: string, regexEnabled: boolean, flags: string, offset: number, limit: number): string {
+  const params = new URLSearchParams();
+  params.set("q", q);
+  if (actor) params.set("a", actor);
+  if (regexEnabled) params.set("regex", "1");
+  if (flags) params.set("flags", flags);
+  params.set("offset", String(offset));
+  params.set("limit", String(limit));
+  return "/search?" + params.toString();
+}
+
 // ── Text helpers ──
 
 function getSearchText(line: DialogLine): string {

@@ -3,6 +3,8 @@ import helpHtml from './pages/help.html';
 import notFoundHtml from './pages/404.html';
 import { handleSearch } from './handlers/search.js';
 
+const CSP = "frame-ancestors 'self'; base-uri 'none'; manifest-src 'self'; script-src-attr 'none'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' data:; worker-src 'self'";
+
 export default {
   async fetch(request: Request, env: any) {
 
@@ -22,6 +24,11 @@ export default {
       });
     });
 
-    return router.fetch(request) || env.ASSETS.fetch(request);
+    let response = await router.fetch(request);
+    if (!response) {
+      response = await env.ASSETS.fetch(request);
+    }
+    response.headers.set('Content-Security-Policy', CSP);
+    return response;
   }
 };
