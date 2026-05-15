@@ -29,6 +29,7 @@ export default {
       response = await env.ASSETS.fetch(request);
     }
     response.headers.set('Content-Security-Policy', CSP);
+    response.headers.set('x-xss-protection', '0');
     return response;
   }
 };
