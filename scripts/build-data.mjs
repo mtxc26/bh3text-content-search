@@ -50,17 +50,52 @@ function extractLines(blocks) {
   return result;
 }
 
+// ── Chinese chapter number conversion (from bh3text/build/util.mjs) ──
+
+const CN_DIGITS = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
+
+function toCnText(n) {
+  if (n < 10) return CN_DIGITS[n];
+  if (n === 10) return "十";
+  const q = Math.floor(n / 10);
+  const r = n % 10;
+  if (q === 1) return "十" + (r > 0 ? CN_DIGITS[r] : "");
+  return CN_DIGITS[q] + "十" + (r > 0 ? CN_DIGITS[r] : "");
+}
+
+function toChapterNumber(ch) {
+  const n = Number(ch) % 100;
+  if (isNaN(n)) return String(ch);
+  const a = Math.floor(n);
+  const b = Math.round(10 * (n - a));
+  let s = "第" + toCnText(a) + "章";
+  if (b > 0) { s += "间章"; if (b > 1 && b !== 5) s += b; }
+  return s;
+}
+
+const CATEGORY_LABELS = { main1: "主线第一部", main2: "主线第二部", er: "往世乐土" };
+
+const MARS_STAGE_NUMBER_MAP = {
+  "1.5": "虚影的宴舞", "3.5": "一个梦游者的苦痛",
+  "7.5": "神明无处祈祷", "9.5": "星星仍在闪烁", "11.5": "光所梦寻之夜",
+};
+
 // ── Process pages ──
 
 async function processPages(name) {
   const pages = JSON.parse(await readFile(join(PAGES_SRC, `${name}.json`), 'utf-8'));
-  const out = pages.map(pg => ({
-    u: pg.u,
-    c: pg.c,
-    t: pg.ct,
-    p: pg.pt,
-    l: extractLines(pg.blocks),
-  }));
+  const out = pages.map(pg => {
+    const isMarsChapter = name === "main2" && String(pg.c).includes(".5") && MARS_STAGE_NUMBER_MAP[String(pg.c)];
+    const chapterLabel = isMarsChapter ? "梦间拾集" : (CATEGORY_LABELS[name] || "");
+    const chapterNum = name === "er" ? "" : (isMarsChapter ? "" : toChapterNumber(pg.c));
+    return {
+      u: pg.u,
+      c: chapterLabel + chapterNum,
+      t: pg.ct,
+      p: pg.pt,
+      l: extractLines(pg.blocks),
+    };
+  });
   await mkdir(PAGES_DST, { recursive: true });
   const json = JSON.stringify(out);
   await writeFile(join(PAGES_DST, `${name}.json`), json, 'utf-8');

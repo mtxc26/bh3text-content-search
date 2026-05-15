@@ -41,6 +41,7 @@ interface GroupedLine {
 interface GroupedResult {
   url: string;
   stageId: string;
+  chapter: string;
   chapterTitle: string;
   pageTitle: string;
   matchCount: number;
@@ -370,6 +371,7 @@ function groupResults(
     allResults.push({
       url: stage.u + '#stage_' + stageNum,
       stageId: 'stage_' + stageNum,
+      chapter: stage.c,
       chapterTitle: stage.t,
       pageTitle: stage.p,
       matchCount: bucket.matchIndices.size,
@@ -437,6 +439,7 @@ export async function handleSearch(request: Request, env: any): Promise<Response
       hasMore,
       results: results.map(r => ({
         url: r.url,
+        chapter: r.chapter,
         chapterTitle: r.chapterTitle,
         pageTitle: r.pageTitle,
         matchCount: r.matchCount,
