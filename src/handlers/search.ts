@@ -146,8 +146,8 @@ function parseSearchMode(query: string, regexEnabled: boolean, flags: string): S
   try {
     return { kind: 'regex', regex: new RegExp(query, flags) };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return { error: `正则表达式无效：${message}` };
+    const message = String(error);
+    return { error: `Invalid input: ${message}` };
   }
 }
 
