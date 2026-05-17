@@ -1,4 +1,5 @@
 import renderTemplate from "../build-cache/search.hbs.js";
+import { checkSync } from "recheck";
 import yn from "yn";
 
 const BASE_URL = 'https://www.bh3text.com';
@@ -144,6 +145,10 @@ function parseSearchMode(query: string, regexEnabled: boolean, flags: string): S
   }
 
   try {
+    const checkResult = checkSync(query, flags);
+    if (checkResult.status === 'vulnerable') {
+      return { error: '暂不支持此表达式，请尝试修改您的输入。' };
+    }
     return { kind: 'regex', regex: new RegExp(query, flags) };
   } catch (error) {
     const message = String(error);
