@@ -1,0 +1,134 @@
+This document explains how AI agents should interact with the search functionality at **bh3text.com**, a search engine for *Honkai Impact 3rd* dialogue text.
+
+## API Endpoint
+
+```
+GET https://www.bh3text.com/search?q={query}&format=json
+```
+
+### Required Parameter
+
+| Parameter | Description |
+|-----------|-------------|
+| `q`       | Search query string |
+
+### Optional Parameters
+
+| Parameter  | Type    | Default | Description |
+|------------|---------|---------|-------------|
+| `format`   | string  | (html)  | Set to `json` for machine-readable results |
+| `a`        | string  | —       | Filter results to a specific speaker/actor |
+| `regex`    | string  | no      | Treat `q` as a JavaScript RegExp pattern |
+| `flags`    | string  | —       | RegExp flags (e.g. `gi`, `m`, `i`) |
+| `offset`   | int     | 0       | Pagination offset |
+| `limit`    | int     | 100     | Results per page (max: 1000) |
+
+## Search Syntax
+
+### 1. Plain Mode (default)
+
+- **Space-separated tokens**: All tokens must appear somewhere in the line (logical AND).
+  - `琪亚娜 芽衣` → lines containing *both* "琪亚娜" and "芽衣"
+- **Quoted phrases**: Double-quote a phrase for exact match (preserves internal spaces).
+  - `"琪亚娜 出击"` → lines containing the exact phrase "琪亚娜 出击"
+  - `"出击"` → exact match for "出击" (without quotes, space splitting would not apply anyway for single word)
+
+### 2. Regex Mode (`regex=1`)
+
+When `regex=1`, `q` is treated directly as `new RegExp(q, flags)`. No space splitting or quote handling occurs.
+
+- `q=琪亚娜.*芽衣&regex=1` → lines matching the regex
+- `q=^布洛妮娅&regex=1&flags=mi` → lines starting with "布洛妮娅", case-insensitive and multiline
+
+**Note**: Vulnerable ReDoS patterns are rejected by the server. If you receive an error, simplify your regex.
+
+## JSON Response Format
+
+A successful JSON response has this structure:
+
+```json
+{
+  "ok": true,
+  "results": [
+    {
+      "url": "/path/to/stage",
+      "stageId": "stage-identifier",
+      "chapter": "Chapter name",
+      "chapterTitle": "Chapter title",
+      "pageTitle": "Page title",
+      "matchCount": 3,
+      "lines": [
+        {
+          "actor": "琪亚娜",
+          "content": "我们要并肩作战！",
+          "match": true,
+          "lineId": "abc123",
+          "lineUrl": "/path/to/stage#abc123"
+        },
+        {
+          "actor": "",
+          "content": "",
+          "match": false,
+          "separator": true
+        }
+      ]
+    }
+  ],
+  "hasMore": false,
+  "totalCount": 42
+}
+```
+
+### Field Notes
+
+- `results[].lines` is an array of `GroupedLine` objects. Each line has:
+  - `actor`: Speaker name (HTML, may contain `<search-match>` tags in HTML mode)
+  - `content`: Dialogue text (HTML, may contain `<search-match>` tags in HTML mode)
+  - `match`: `true` if this specific line matched the query
+  - `lineId`: Optional line identifier
+  - `lineUrl`: Optional direct link to this line
+  - `separator`: If `true`, this is a visual gap indicator (no content, not a real line) — **ignore these** when processing results
+- `matchCount`: Number of matching lines within this stage
+- `hasMore`: Whether there are more results beyond the current page
+- `totalCount`: Total number of matched stages (not lines)
+
+**Context**: Matching lines include ±2 surrounding lines for context. Non-matching context lines have `match: false`.
+
+## Best Practices for AI Agents
+
+1. **Always use `format=json`** — Never scrape the HTML page; the JSON API is designed for programmatic access.
+
+2. **Use regex mode for complex queries** — When you need patterns like alternation, wildcards, or anchors, enable `regex=1`. Example: `q=琪亚娜|芽衣&regex=1` to find lines with either name.
+
+3. **Filter by actor with `a` parameter** — If the user asks "what did Kiana say about...", use `a=琪亚娜&q=...` to narrow results.
+
+4. **Paginate with `offset` and `limit`** — Check `hasMore` and increment `offset` to fetch all results. Use a reasonable `limit` (e.g. 200–500) to reduce round-trips.
+
+5. **Handle `separator` lines** — Skip `{"separator": true}` entries when extracting dialogue; they are visual delimiters, not actual content.
+
+6. **Chinese text is the norm** — The indexed content is primarily Chinese. Queries should use Chinese characters unless searching for specific non-Chinese terms.
+
+7. **Note on actor names**: The `actor` field contains HTML, so names may include markup like `<search-match>...</search-match>` (in HTML mode; not in JSON mode for actor). The `content` field also contains HTML tags from the original game text (e.g. `<i>`, `<color=...>`).
+
+## Example Requests
+
+```
+# Find all lines where 琪亚娜 says something about 芽衣
+GET /search?q=芽衣&a=琪亚娜&format=json
+
+# Regex: find lines with either 琪亚娜 or 芽衣
+GET /search?q=琪亚娜|芽衣&regex=1&format=json
+
+# Paginate through results, 200 per page
+GET /search?q=布洛妮娅&format=json&limit=200&offset=0
+GET /search?q=布洛妮娅&format=json&limit=200&offset=200
+
+# Exact phrase match
+GET /search?q="我会保护你"&format=json
+```
+
+## Rate Limits & Etiquette
+
+- Be respectful: cache results when appropriate, don't hammer the API.
+- If you need to fetch many pages, add a small delay between requests.
+- The search is backed by static JSON files loaded into memory; there is no database overhead, but still be considerate.

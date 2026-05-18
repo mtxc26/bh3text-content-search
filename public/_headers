@@ -1,0 +1,7 @@
+/*
+  cache-control: max-age=600
+  Content-Security-Policy: frame-ancestors 'self'; base-uri 'self'; manifest-src 'self'; script-src-attr 'none'; script-src 'self' https://staticassets.bh3text.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' data:; child-src 'self' https: blob: data:; worker-src 'self'; font-src 'self' https://staticassets.bh3text.com
+  X-XSS-Protection: 0
+
+/search/help
+  cache-control: public, max-age=604800

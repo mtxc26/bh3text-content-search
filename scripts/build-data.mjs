@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, cp } from 'node:fs/promises';
 import { execSync } from 'node:child_process';
 import Handlebars from 'handlebars';
 import { join, dirname } from 'node:path';
@@ -8,6 +8,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 const PAGES_SRC = join(ROOT, 'data', 'dist', 'pages');
 const PAGES_DST = join(ROOT, 'dist', 'static', 'all');
+const WEBSTATIC = join(ROOT, 'dist', 'static');
 
 // ── Strip Unity rich text tags ──
 
@@ -127,6 +128,8 @@ export default Handlebars.template(${compiled});
 }
 
 // ── Main ──
+await mkdir(WEBSTATIC, { recursive: true });
+await cp(join(ROOT, 'public'), WEBSTATIC, { recursive: true });
 
 for (const name of ['main1', 'main2', 'er']) {
   await processPages(name);
