@@ -146,7 +146,7 @@ function parseSearchMode(query: string, regexEnabled: boolean, flags: string): S
 
   try {
     const checkResult = checkSync(query, flags);
-    if (checkResult.status === 'vulnerable') {
+    if (checkResult.status === 'vulnerable' && checkResult.complexity.type === 'exponential') {
       return { error: '暂不支持此表达式，请尝试修改您的输入。' };
     }
     return { kind: 'regex', regex: new RegExp(query, flags) };
